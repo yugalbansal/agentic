@@ -1,0 +1,25 @@
+project_id = "fifvgsxcflsfrwamfroy"
+
+[functions.agents]
+verify_jwt = true
+
+[functions.execute-agent]
+verify_jwt = true
+
+[functions.service-connections]
+verify_jwt = true
+
+[functions.workflow-templates]
+verify_jwt = false
+
+[functions.scheduler]
+verify_jwt = false
+
+[functions.webhook-handler]
+verify_jwt = false
+
+[functions.agent-logs]
+verify_jwt = true
+
+[functions.google-oauth]
+verify_jwt = false
