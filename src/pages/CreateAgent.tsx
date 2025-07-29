@@ -26,6 +26,7 @@ import { TopNav } from '@/components/layout/TopNav';
 import { useApi } from '@/hooks/useApi';
 import { useNavigate } from 'react-router-dom';
 import { NodeConfigModal } from '@/components/ui/node-config-modal';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Custom workflow node component
 function WorkflowNode({ data, id, selected }: { data: any; id: string; selected?: boolean }) {
@@ -154,6 +155,7 @@ export default function CreateAgent() {
   const { addAgent } = useAgentStore();
   const { createAgent } = useApi();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const onConnect = useCallback(
     (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -286,6 +288,15 @@ export default function CreateAgent() {
   };
 
   const saveAgent = async () => {
+    if (!user) {
+      toast({
+        title: 'Authentication required',
+        description: 'Please sign in to create agents',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!validateWorkflow()) {
       toast({
         title: "Invalid workflow",

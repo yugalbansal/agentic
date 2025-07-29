@@ -64,7 +64,13 @@ export const useServiceStore = create<ServiceStore>((set, get) => ({
     set({ isConnecting: serviceId });
     
     // Simulate OAuth flow
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (error) {
+      console.error('Connection error:', error);
+      set({ isConnecting: null });
+      throw error;
+    }
     
     set(state => ({
       services: state.services.map(service =>

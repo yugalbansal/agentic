@@ -7,6 +7,7 @@ import { useServiceStore } from '@/store/useServiceStore';
 import { useToast } from '@/hooks/use-toast';
 import { TopNav } from '@/components/layout/TopNav';
 import { useApi } from '@/hooks/useApi';
+import { useAuth } from '@/contexts/AuthContext';
 
 const container = {
   hidden: { opacity: 0 },
@@ -28,8 +29,18 @@ export default function ConnectServices() {
   const { services, isConnecting, connectService, disconnectService, updateServiceInfo, setConnecting } = useServiceStore();
   const { connectService: connectServiceApi, disconnectService: disconnectServiceApi, startGoogleOAuth } = useApi();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleConnect = async (serviceId: string) => {
+    if (!user) {
+      toast({
+        title: 'Authentication required',
+        description: 'Please sign in to connect services',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setConnecting(serviceId);
       

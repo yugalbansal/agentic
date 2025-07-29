@@ -8,6 +8,8 @@ import { useAgentStore } from '@/store/useAgentStore';
 import { TopNav } from '@/components/layout/TopNav';
 import { useApi } from '@/hooks/useApi';
 import { useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 const container = {
   hidden: { opacity: 0 },
@@ -28,26 +30,39 @@ const item = {
 export default function Dashboard() {
   const { agents, logs, updateAgent, setAgents, setLogs } = useAgentStore();
   const { getAgents, getAgentLogs, updateAgent: updateAgentApi } = useApi();
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const agentsData = await getAgents();
-        if (agentsData?.agents) {
-          setAgents(agentsData.agents);
-        }
-        
-        const logsData = await getAgentLogs();
-        if (logsData?.logs) {
-          setLogs(logsData.logs);
+        // Only load data if user is authenticated
+        if (user) {
+          const agentsData = await getAgents();
+          if (agentsData?.agents) {
+            setAgents(agentsData.agents);
+          }
+          
+          const logsData = await getAgentLogs();
+          if (logsData?.logs) {
+            setLogs(logsData.logs);
+          }
         }
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
+        // Don't show error toast for authentication errors
+        if (!error.message?.includes('Not authenticated')) {
+          toast({
+            title: 'Failed to load data',
+            description: 'Please try refreshing the page',
+            variant: 'destructive',
+          });
+        }
       }
     };
     
     loadData();
-  }, []);
+  }, [user, getAgents, getAgentLogs, setAgents, setLogs, toast]);
   
   const activeAgents = agents.filter(agent => agent.status === 'active').length;
   const totalRuns = logs.length;

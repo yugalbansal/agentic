@@ -122,7 +122,7 @@ export function AgentCard({
               <Clock className="h-4 w-4" />
               {agent.lastRun ? (
                 <span>
-                  {formatDistanceToNow(agent.lastRun, { addSuffix: true })}
+                  {formatDistanceToNow(new Date(agent.lastRun), { addSuffix: true })}
                 </span>
               ) : (
                 <span>Never run</span>

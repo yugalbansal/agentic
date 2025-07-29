@@ -41,6 +41,8 @@ import { useAgentStore } from '@/store/useAgentStore';
 import { TopNav } from '@/components/layout/TopNav';
 import { useApi } from '@/hooks/useApi';
 import { useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 const container = {
   hidden: { opacity: 0 },
@@ -60,6 +62,8 @@ const item = {
 export default function AgentLogs() {
   const { logs, agents, setLogs } = useAgentStore();
   const { getAgentLogs, retryExecution } = useApi();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
@@ -67,17 +71,28 @@ export default function AgentLogs() {
   useEffect(() => {
     const loadLogs = async () => {
       try {
-        const logsData = await getAgentLogs();
-        if (logsData?.logs) {
-          setLogs(logsData.logs);
+        // Only load data if user is authenticated
+        if (user) {
+          const logsData = await getAgentLogs();
+          if (logsData?.logs) {
+            setLogs(logsData.logs);
+          }
         }
       } catch (error) {
         console.error('Failed to load logs:', error);
+        // Don't show error for authentication issues
+        if (!error.message?.includes('Not authenticated')) {
+          toast({
+            title: 'Failed to load logs',
+            description: 'Please try refreshing the page',
+            variant: 'destructive',
+          });
+        }
       }
     };
     
     loadLogs();
-  }, []);
+  }, [user, getAgentLogs, setLogs, toast]);
 
   const filteredLogs = logs.filter(log => {
     const matchesSearch = log.agentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -138,7 +153,7 @@ export default function AgentLogs() {
             <div>
               <span className="text-sm font-medium">Trigger Time:</span>
               <p className="text-sm text-muted-foreground">
-                {format(log.triggerTime, 'PPpp')}
+                {format(new Date(log.triggerTime), 'PPpp')}
               </p>
             </div>
             <div>

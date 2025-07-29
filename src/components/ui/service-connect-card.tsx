@@ -76,7 +76,7 @@ export function ServiceConnectCard({
               
               {service.connectedAt && (
                 <p className="text-xs text-muted-foreground">
-                  Connected {formatDistanceToNow(service.connectedAt, { addSuffix: true })}
+                  Connected {formatDistanceToNow(new Date(service.connectedAt), { addSuffix: true })}
                 </p>
               )}
               

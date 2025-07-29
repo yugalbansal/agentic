@@ -1,15 +1,21 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useApi() {
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const callFunction = useCallback(async (functionName: string, body?: any, method: string = 'POST') => {
     try {
+      if (!user) {
+        throw new Error('Not authenticated - please sign in');
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated - please sign in');
+        throw new Error('No valid session - please sign in again');
       }
 
       console.log(`Calling function: ${functionName}`, { body, method });
@@ -43,7 +49,7 @@ export function useApi() {
       
       throw error;
     }
-  }, [toast]);
+  }, [toast, user]);
 
   // Agent Management
   const createAgent = useCallback(async (agentData: any) => {
