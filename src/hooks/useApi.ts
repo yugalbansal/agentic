@@ -81,20 +81,55 @@ export function useApi() {
 
   // Service Connections
   const getServiceConnections = useCallback(async () => {
-    return await callFunction('service-connections', null, 'GET');
+    const result = await callFunction('service-connections', null, 'GET');
+    return result || { connections: [] };
   }, [callFunction]);
 
   const connectService = useCallback(async (serviceData: any) => {
-    return await callFunction('service-connections', serviceData);
+    return await callFunction('service-connections', serviceData, 'POST');
   }, [callFunction]);
 
   const disconnectService = useCallback(async (serviceType: string) => {
-    return await callFunction(`service-connections/${serviceType}`, null, 'DELETE');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/service-connections/${serviceType}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to disconnect service');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error disconnecting service:', error);
+      throw error;
+    }
   }, [callFunction]);
 
   // Google OAuth
   const startGoogleOAuth = useCallback(async () => {
-    return await callFunction('google-oauth/start', null, 'GET');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-oauth/start`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to start OAuth flow');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error starting Google OAuth:', error);
+      throw error;
+    }
   }, [callFunction]);
 
   // Workflow Templates

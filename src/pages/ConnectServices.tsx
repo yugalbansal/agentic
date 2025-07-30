@@ -1,13 +1,23 @@
 import { motion } from 'framer-motion';
-import { Shield, Zap, Info } from 'lucide-react';
+import { Shield, Zap, Info, AlertCircle } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ServiceConnectCard } from '@/components/ui/service-connect-card';
-import { useServiceStore } from '@/store/useServiceStore';
 import { useToast } from '@/hooks/use-toast';
 import { TopNav } from '@/components/layout/TopNav';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from 'react';
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 const container = {
   hidden: { opacity: 0 },
@@ -26,10 +36,83 @@ const item = {
 };
 
 export default function ConnectServices() {
-  const { services, isConnecting, connectService, disconnectService, updateServiceInfo, setConnecting } = useServiceStore();
-  const { connectService: connectServiceApi, disconnectService: disconnectServiceApi, startGoogleOAuth } = useApi();
+  const [services, setServices] = useState([]);
+  const [isConnecting, setIsConnecting] = useState(null);
+  const [isNotionModalOpen, setIsNotionModalOpen] = useState(false);
+  const [notionToken, setNotionToken] = useState('');
+  const [loading, setLoading] = useState(true);
+  const { connectService: connectServiceApi, disconnectService: disconnectServiceApi, startGoogleOAuth, getServiceConnections } = useApi();
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Load service connections on component mount
+  useEffect(() => {
+    loadServiceConnections();
+  }, [user]);
+
+  const loadServiceConnections = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const { connections } = await getServiceConnections();
+      
+      // Create services array with connection status
+      const servicesData = [
+        {
+          id: 'gmail',
+          name: 'Gmail',
+          icon: '📧',
+          connected: false,
+          connectedAt: null,
+          scopes: ['read', 'send'],
+          accountInfo: null
+        },
+        {
+          id: 'notion',
+          name: 'Notion',
+          icon: '📝',
+          connected: false,
+          connectedAt: null,
+          scopes: ['read', 'write'],
+          accountInfo: null
+        },
+        {
+          id: 'telegram',
+          name: 'Telegram',
+          icon: '💬',
+          connected: false,
+          connectedAt: null,
+          scopes: ['send'],
+          accountInfo: null
+        }
+      ];
+
+      // Update services with actual connection data
+      connections?.forEach(conn => {
+        const service = servicesData.find(s => s.id === conn.service_type);
+        if (service && conn.is_active) {
+          service.connected = true;
+          service.connectedAt = new Date(conn.connected_at);
+          service.accountInfo = {
+            email: conn.service_config?.email,
+            name: conn.service_config?.name || conn.service_config?.bot_name,
+          };
+        }
+      });
+
+      setServices(servicesData);
+    } catch (error) {
+      console.error('Failed to load service connections:', error);
+      toast({
+        title: 'Failed to load connections',
+        description: 'Please try refreshing the page',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleConnect = async (serviceId: string) => {
     if (!user) {
@@ -42,7 +125,7 @@ export default function ConnectServices() {
     }
 
     try {
-      setConnecting(serviceId);
+      setIsConnecting(serviceId);
       
       if (serviceId === 'gmail') {
         // Start Google OAuth flow
@@ -58,7 +141,7 @@ export default function ConnectServices() {
             window.removeEventListener('message', handleMessage);
             
             if (event.data.success) {
-              updateServiceInfo(serviceId, { 
+              updateServiceInState(serviceId, { 
                 connected: true, 
                 connectedAt: new Date(),
                 accountInfo: { email: 'Connected via OAuth' }
@@ -75,55 +158,21 @@ export default function ConnectServices() {
                 variant: "destructive",
               });
             }
-            setConnecting(null);
+            setIsConnecting(null);
           }
         };
         
         window.addEventListener('message', handleMessage);
         
       } else if (serviceId === 'telegram') {
-        const botToken = prompt('Enter your Telegram Bot Token:');
-        const chatId = prompt('Enter your Telegram Chat ID:');
-        
-        if (botToken && chatId) {
-          await connectServiceApi({
-            service_type: 'telegram',
-            access_token: botToken,
-            service_config: { chat_id: chatId },
-          });
-          
-          updateServiceInfo(serviceId, { 
-            connected: true, 
-            connectedAt: new Date(),
-            accountInfo: { name: 'Telegram Bot' }
-          });
-          
-          toast({
-            title: "Telegram Connected",
-            description: "Successfully connected Telegram bot",
-          });
-        }
+        // For now, show a message that Telegram will be implemented later
+        toast({
+          title: "Coming Soon",
+          description: "Telegram integration will be available soon",
+        });
       } else if (serviceId === 'notion') {
-        const token = prompt('Enter your Notion Integration Token:');
-        
-        if (token) {
-          await connectServiceApi({
-            service_type: 'notion',
-            access_token: token,
-            service_config: {},
-          });
-          
-          updateServiceInfo(serviceId, { 
-            connected: true, 
-            connectedAt: new Date(),
-            accountInfo: { name: 'Notion Workspace' }
-          });
-          
-          toast({
-            title: "Notion Connected",
-            description: "Successfully connected to Notion",
-          });
-        }
+        // Open Notion token input modal
+        setIsNotionModalOpen(true);
       }
     } catch (error: any) {
       toast({
@@ -132,13 +181,71 @@ export default function ConnectServices() {
         variant: "destructive",
       });
     } finally {
-      setConnecting(null);
+      setIsConnecting(null);
     }
   };
 
+  const handleNotionConnect = async () => {
+    if (!notionToken.trim()) {
+      toast({
+        title: "Token Required",
+        description: "Please enter your Notion integration token",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsConnecting('notion');
+      
+      await connectServiceApi({
+        service_type: 'notion',
+        access_token: notionToken,
+        service_config: {},
+      });
+      
+      // Reload connections to get updated data
+      await loadServiceConnections();
+      
+      toast({
+        title: "Notion Connected",
+        description: "Successfully connected to Notion",
+      });
+      
+      setIsNotionModalOpen(false);
+      setNotionToken('');
+    } catch (error: any) {
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Failed to connect to Notion",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnecting(null);
+    }
+  };
+
+  const updateServiceInState = (serviceId: string, updates: any) => {
+    setServices(prev => prev.map(service =>
+      service.id === serviceId
+        ? { ...service, ...updates }
+        : service
+    ));
+  };
+
   const handleDisconnect = (serviceId: string) => {
+    try {
+      disconnectServiceApi(serviceId);
+      updateServiceInState(serviceId, {
+        connected: false,
+        connectedAt: null,
+        accountInfo: null
+      });
+    } catch (error) {
+      console.error('Failed to disconnect service:', error);
+    }
+    
     const service = services.find(s => s.id === serviceId);
-    disconnectService(serviceId);
     toast({
       title: `${service?.name} disconnected`,
       description: "This service is no longer available for workflows.",
@@ -146,6 +253,10 @@ export default function ConnectServices() {
   };
 
   const connectedCount = services.filter(s => s.connected).length;
+  
+  if (loading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -261,6 +372,61 @@ export default function ConnectServices() {
           </Card>
         </motion.div>
       </motion.div>
+
+      {/* Notion Token Input Modal */}
+      <Dialog open={isNotionModalOpen} onOpenChange={setIsNotionModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Notion</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                You need to create a Notion integration first. Visit{' '}
+                <a 
+                  href="https://www.notion.so/my-integrations" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  notion.so/my-integrations
+                </a>{' '}
+                to create one.
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-2">
+              <Label htmlFor="notion-token">Integration Token</Label>
+              <Input
+                id="notion-token"
+                type="password"
+                placeholder="secret_..."
+                value={notionToken}
+                onChange={(e) => setNotionToken(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsNotionModalOpen(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleNotionConnect}
+                disabled={isConnecting === 'notion'}
+                className="flex-1"
+              >
+                {isConnecting === 'notion' ? 'Connecting...' : 'Connect'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

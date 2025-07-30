@@ -18,11 +18,12 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.log('No authorization header provided');
       return new Response(JSON.stringify({ error: 'No authorization header' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -33,11 +34,14 @@ Deno.serve(async (req) => {
     const { data: user, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user.user) {
+      console.error('Authentication failed:', authError);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log(`Service connections request: ${req.method} for user ${user.user.id}`);
 
     const url = new URL(req.url);
     const method = req.method;
@@ -50,6 +54,7 @@ Deno.serve(async (req) => {
         .eq('user_id', user.user.id);
 
       if (error) {
+        console.error('Database error fetching connections:', error);
         return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -65,6 +70,7 @@ Deno.serve(async (req) => {
         service_config: conn.service_config,
       }));
 
+      console.log(`Returning ${safeConnections?.length || 0} connections for user`);
       return new Response(JSON.stringify({ connections: safeConnections }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -77,6 +83,7 @@ Deno.serve(async (req) => {
         const text = await req.text();
         body = text ? JSON.parse(text) : {};
       } catch (parseError) {
+        console.error('JSON parsing error:', parseError);
         return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -85,10 +92,13 @@ Deno.serve(async (req) => {
       
       const { service_type, service_config, access_token, refresh_token } = body;
 
+      console.log(`Creating connection for service: ${service_type}`);
+
       // Validate the connection based on service type
       const validationResult = await validateServiceConnection(service_type, access_token, service_config);
       
       if (!validationResult.valid) {
+        console.error('Service validation failed:', validationResult.error);
         return new Response(JSON.stringify({ error: validationResult.error }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -110,11 +120,14 @@ Deno.serve(async (req) => {
         .single();
 
       if (error) {
+        console.error('Database error creating connection:', error);
         return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      console.log(`Connection created successfully: ${connection.id}`);
 
       return new Response(JSON.stringify({ 
         connection: {
@@ -134,6 +147,8 @@ Deno.serve(async (req) => {
     if (method === 'DELETE') {
       const serviceType = url.pathname.split('/').pop();
       
+      console.log(`Disconnecting service: ${serviceType} for user ${user.user.id}`);
+
       const { error } = await supabase
         .from('service_connections')
         .update({ is_active: false })
@@ -141,11 +156,14 @@ Deno.serve(async (req) => {
         .eq('service_type', serviceType);
 
       if (error) {
+        console.error('Database error disconnecting service:', error);
         return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      console.log(`Service ${serviceType} disconnected successfully`);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

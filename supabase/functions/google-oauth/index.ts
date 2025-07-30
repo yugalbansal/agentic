@@ -5,8 +5,8 @@ const corsHeaders = {
 };
 
 // Google OAuth Configuration
-const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
-const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
+const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
 const GOOGLE_REDIRECT_URI = `${Deno.env.get('SUPABASE_URL')}/functions/v1/google-oauth/callback`;
 
 Deno.serve(async (req) => {
@@ -23,8 +23,18 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
+
+    // Check if Google OAuth is configured
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      return new Response(JSON.stringify({ 
+        error: 'Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const url = new URL(req.url);
     const path = url.pathname;
@@ -43,6 +53,7 @@ Deno.serve(async (req) => {
       const { data: user, error: authError } = await supabase.auth.getUser(token);
       
       if (authError || !user.user) {
+        console.error('Auth error in Google OAuth start:', authError);
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -70,6 +81,8 @@ Deno.serve(async (req) => {
       authUrl.searchParams.set('access_type', 'offline');
       authUrl.searchParams.set('prompt', 'consent');
       authUrl.searchParams.set('state', state);
+
+      console.log('Generated OAuth URL for user:', user.user.id);
 
       return new Response(JSON.stringify({ 
         auth_url: authUrl.toString() 

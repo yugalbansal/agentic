@@ -4,6 +4,19 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
+// Environment variables validation
+const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+if (!OPENROUTER_API_KEY) {
+  console.error('OPENROUTER_API_KEY environment variable is required');
+}
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -20,35 +33,9 @@ Deno.serve(async (req) => {
     // Initialize Supabase client with service role for server-side operations
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', // Use service role key for server operations
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
-  }
-}
-)
 
-// Environment variables validation
-const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-if (!OPENROUTER_API_KEY) {
-  console.error('OPENROUTER_API_KEY environment variable is required');
-}
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
-}
-
-serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { 
-      status: 200,
-      headers: corsHeaders 
-    });
-  }
-
-  try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
 
     // Authenticate user
@@ -56,7 +43,7 @@ serve(async (req) => {
     if (!authResult.success) {
       return createErrorResponse(authResult.error, authResult.status, corsHeaders);
     }
-    const { user } = authResult;
+    const { user, supabase: userSupabase } = authResult;
 
     const url = new URL(req.url);
     const pathSegments = url.pathname.split('/').filter(segment => segment.length > 0);
@@ -69,25 +56,25 @@ serve(async (req) => {
     switch (method) {
       case 'GET':
         if (agentId && agentId !== 'agents') {
-          return await getAgent(user.id, agentId);
+          return await getAgent(user.id, agentId, supabase);
         } else {
-          return await getAgents(user.id);
+          return await getAgents(user.id, supabase);
         }
 
       case 'POST':
-        return await createAgent(req, user.id);
+        return await createAgent(req, user.id, supabase);
 
       case 'PUT':
         if (!agentId || agentId === 'agents') {
           return createErrorResponse('Agent ID is required for updates', 400, corsHeaders);
         }
-        return await updateAgent(req, user.id, agentId);
+        return await updateAgent(req, user.id, agentId, supabase);
 
       case 'DELETE':
         if (!agentId || agentId === 'agents') {
           return createErrorResponse('Agent ID is required for deletion', 400, corsHeaders);
         }
-        return await deleteAgent(user.id, agentId);
+        return await deleteAgent(user.id, agentId, supabase);
 
       default:
         return createErrorResponse('Method not allowed', 405, corsHeaders);
@@ -102,6 +89,12 @@ serve(async (req) => {
 // Authentication helper
 async function authenticateUser(req: Request) {
   try {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.7.1');
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return { 
@@ -141,7 +134,8 @@ async function authenticateUser(req: Request) {
 
     return { 
       success: true, 
-      user: user.user 
+      user: user.user,
+      supabase
     };
   } catch (error) {
     console.error('Authentication error:', error);
@@ -154,7 +148,7 @@ async function authenticateUser(req: Request) {
 }
 
 // Get all agents for a user
-async function getAgents(userId: string) {
+async function getAgents(userId: string, supabase: any) {
   try {
     console.log(`Fetching agents for user: ${userId}`);
 
@@ -186,7 +180,7 @@ async function getAgents(userId: string) {
 }
 
 // Get a specific agent
-async function getAgent(userId: string, agentId: string) {
+async function getAgent(userId: string, agentId: string, supabase: any) {
   try {
     console.log(`Fetching agent ${agentId} for user: ${userId}`);
 
@@ -225,7 +219,7 @@ async function getAgent(userId: string, agentId: string) {
 }
 
 // Create a new agent
-async function createAgent(req: Request, userId: string) {
+async function createAgent(req: Request, userId: string, supabase: any) {
   try {
     console.log(`Creating agent for user: ${userId}`);
 
@@ -296,7 +290,7 @@ async function createAgent(req: Request, userId: string) {
 }
 
 // Update an existing agent
-async function updateAgent(req: Request, userId: string, agentId: string) {
+async function updateAgent(req: Request, userId: string, agentId: string, supabase: any) {
   try {
     console.log(`Updating agent ${agentId} for user: ${userId}`);
 
@@ -401,7 +395,7 @@ async function updateAgent(req: Request, userId: string, agentId: string) {
 }
 
 // Delete an agent
-async function deleteAgent(userId: string, agentId: string) {
+async function deleteAgent(userId: string, agentId: string, supabase: any) {
   try {
     console.log(`Deleting agent ${agentId} for user: ${userId}`);
 
